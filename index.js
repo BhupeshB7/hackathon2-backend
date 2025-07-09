@@ -52,7 +52,7 @@ app.get("/api/upload", (req, res) => {
 
 // Create new chat
 app.post("/api/chats", requireAuth(), async (req, res) => {
-    const userId = req.auth.userId;
+    const userId = req.auth.userId; 
     const { text } = req.body;
 
     try {
@@ -118,8 +118,7 @@ app.get("/api/userchats", requireAuth(), async (req, res) => {
 
 // Get single chat by ID
 app.get("/api/chats/:id", requireAuth(), async (req, res) => {
-    const userId = req.auth.userId;
-
+    const userId = req.auth.userId; 
     try {
         const chat = await Chat.findOne({ _id: req.params.id, userId });
         res.status(200).send(chat);
@@ -131,7 +130,7 @@ app.get("/api/chats/:id", requireAuth(), async (req, res) => {
 
 // Update chat with new messages
 app.put("/api/chats/:id", requireAuth(), async (req, res) => {
-    const userId = req.auth.userId;
+    const userId = req.auth.userId; 
     const { question, answer, img } = req.body;
 
     const newItems = [
