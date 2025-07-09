@@ -42,7 +42,7 @@ const imagekit = new ImageKit({
 
 // ====================== ROUTES ====================== //
 app.get("/",(req,res)=>{
-    res.send("Hello world!")
+    res.send("coder army ai started!")
 })
 // Get ImageKit auth parameters
 app.get("/api/upload", (req, res) => {
