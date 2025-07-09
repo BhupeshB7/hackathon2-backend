@@ -12,8 +12,8 @@ import crypto from "node:crypto";
 import { v4 as uuidv4 } from "uuid";
 import JSZip from 'jszip'; 
 import deployRouter from "./routes.js";
-dotenv.config();
-import { ClerkExpressRequireAuth } from "@clerk/clerk-sdk-node";
+dotenv.config(); 
+import { requireAuth } from "@clerk/express";
 import { Prompt } from "./models/codeGenChat.js";
 import Publish from "./models/publish.js";  
 import connectDB from "./config/db.js";
@@ -51,7 +51,7 @@ app.get("/api/upload", (req, res) => {
 });
 
 // Create new chat
-app.post("/api/chats", ClerkExpressRequireAuth(), async (req, res) => {
+app.post("/api/chats", requireAuth(), async (req, res) => {
     const userId = req.auth.userId;
     const { text } = req.body;
 
@@ -94,7 +94,7 @@ app.post("/api/chats", ClerkExpressRequireAuth(), async (req, res) => {
 });
 
 // Get all user chats
-app.get("/api/userchats", ClerkExpressRequireAuth(), async (req, res) => {
+app.get("/api/userchats", requireAuth(), async (req, res) => {
     const userId = req.auth.userId;
 
     try {
@@ -117,7 +117,7 @@ app.get("/api/userchats", ClerkExpressRequireAuth(), async (req, res) => {
 });
 
 // Get single chat by ID
-app.get("/api/chats/:id", ClerkExpressRequireAuth(), async (req, res) => {
+app.get("/api/chats/:id", requireAuth(), async (req, res) => {
     const userId = req.auth.userId;
 
     try {
@@ -130,7 +130,7 @@ app.get("/api/chats/:id", ClerkExpressRequireAuth(), async (req, res) => {
 });
 
 // Update chat with new messages
-app.put("/api/chats/:id", ClerkExpressRequireAuth(), async (req, res) => {
+app.put("/api/chats/:id", requireAuth(), async (req, res) => {
     const userId = req.auth.userId;
     const { question, answer, img } = req.body;
 
@@ -159,7 +159,7 @@ app.put("/api/chats/:id", ClerkExpressRequireAuth(), async (req, res) => {
 });
 
 //create a new prompt for the code generation
-app.post("/api/codeGenPrompts", ClerkExpressRequireAuth(), async (req, res) => {
+app.post("/api/codeGenPrompts", requireAuth(), async (req, res) => {
     const userId = req.auth.userId;
     const { prompt } = req.body;
     console.log(prompt);
