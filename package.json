@@ -1,0 +1,31 @@
+{
+  "name": "backend",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "type": "module",
+  "scripts": {
+    "start": "node  --env-file .env index.js",
+    "build:tailwind": "tailwindcss -i ./input.css -o ./dist/tailwind.css --minify"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@clerk/backend": "^2.3.1",
+    "@clerk/clerk-sdk-node": "^5.1.6",
+    "@clerk/express": "^1.7.3",
+    "@octokit/rest": "^22.0.0",
+    "archiver": "^7.0.1",
+    "axios": "^1.10.0",
+    "cors": "^2.8.5",
+    "dotenv": "^17.0.1",
+    "express": "^5.1.0",
+    "fs-extra": "^11.3.0",
+    "imagekit": "^6.0.0",
+    "jszip": "^3.10.1",
+    "mongoose": "^8.16.1",
+    "netlify": "^22.2.1",
+    "uuid": "^11.1.0"
+  }
+}
