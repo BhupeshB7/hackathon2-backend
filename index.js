@@ -253,11 +253,7 @@ app.get("/api/preview/:id", async (req, res) => {
 
         const code = preview.code;
 
-        // Read tailwind.css from dist/
-        const cssPath = path.join(__dirname, "dist", "tailwind.css");
-        const css = await fs.readFile(cssPath, "utf-8");
-
-        res.status(200).json({ code, css });
+        res.status(200).json({ code });
     } catch (err) {
         console.error("Error fetching preview:", err);
         res.status(500).send("Error fetching preview!");
