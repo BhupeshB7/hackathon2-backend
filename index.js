@@ -28,15 +28,42 @@ app.use(cors({ origin: ['http://localhost:5174', 'http://localhost:5173'] }));
 app.use(express.json());
  
 // MongoDB Connection
-const connect = async () => {
-    try {
-        await mongoose.connect(process.env.MONGO_URI);
-        console.log("✅ Connected to MongoDB");
-    } catch (err) {
-        console.error("❌ MongoDB connection error:", err);
-    }
-};
 
+const MONGO_URI = process.env.MONGO_URI;
+
+if (!MONGO_URI) throw new Error(" Please define the MONGO_URI environment variable");
+
+let cached = global.mongoose;
+
+if (!cached) {
+    cached = global.mongoose = { conn: null, promise: null };
+}
+
+async function connectDB() {
+    if (cached.conn) {
+        console.log(" Using existing MongoDB connection");
+        return cached.conn;
+    }
+
+    if (!cached.promise) {
+        console.log(" Connecting to MongoDB...");
+        cached.promise = mongoose.connect(MONGO_URI, {
+            useNewUrlParser: true,
+            useUnifiedTopology: true,
+        });
+    }
+
+    try {
+        cached.conn = await cached.promise;
+        console.log(" MongoDB connected successfully");
+    } catch (e) {
+        console.error(" MongoDB connection failed:", e);
+        cached.promise = null;
+        throw e;
+    }
+
+    return cached.conn;
+}
 // ImageKit Configuration
 const imagekit = new ImageKit({
     urlEndpoint: process.env.IMAGEKIT_URL_ENDPOINT,
@@ -45,7 +72,9 @@ const imagekit = new ImageKit({
 });
 
 // ====================== ROUTES ====================== //
-
+app.get("/",(req,res)=>{
+    res.send("Hello world!")
+})
 // Get ImageKit auth parameters
 app.get("/api/upload", (req, res) => {
     const result = imagekit.getAuthenticationParameters();
@@ -417,6 +446,6 @@ app.post('/api/download-project', async (req, res) => {
 app.use("/api", deployRouter);
 // Start server
 app.listen(port, () => {
-    connect();
+    connectDB();
     console.log(`  Server running on http://localhost:${port}`);
 });
