@@ -16,6 +16,7 @@ dotenv.config();
 import { ClerkExpressRequireAuth } from "@clerk/clerk-sdk-node";
 import { Prompt } from "./models/codeGenChat.js";
 import Publish from "./models/publish.js";  
+import connectDB from "./config/db.js";
 const app = express();
 const port = process.env.PORT || 3000;
 
@@ -28,42 +29,8 @@ app.use(cors({ origin: ['http://localhost:5174', 'http://localhost:5173'] }));
 app.use(express.json());
  
 // MongoDB Connection
-
-const MONGO_URI = process.env.MONGO_URI;
-
-if (!MONGO_URI) throw new Error(" Please define the MONGO_URI environment variable");
-
-let cached = global.mongoose;
-
-if (!cached) {
-    cached = global.mongoose = { conn: null, promise: null };
-}
-
-async function connectDB() {
-    if (cached.conn) {
-        console.log(" Using existing MongoDB connection");
-        return cached.conn;
-    }
-
-    if (!cached.promise) {
-        console.log(" Connecting to MongoDB...");
-        cached.promise = mongoose.connect(MONGO_URI, {
-            useNewUrlParser: true,
-            useUnifiedTopology: true,
-        });
-    }
-
-    try {
-        cached.conn = await cached.promise;
-        console.log(" MongoDB connected successfully");
-    } catch (e) {
-        console.error(" MongoDB connection failed:", e);
-        cached.promise = null;
-        throw e;
-    }
-
-    return cached.conn;
-}
+await connectDB();
+ 
 // ImageKit Configuration
 const imagekit = new ImageKit({
     urlEndpoint: process.env.IMAGEKIT_URL_ENDPOINT,
@@ -445,7 +412,6 @@ app.post('/api/download-project', async (req, res) => {
 });
 app.use("/api", deployRouter);
 // Start server
-app.listen(port, async() => {
-    await connectDB();
+app.listen(port, async() => { 
     console.log(`  Server running on http://localhost:${port}`);
 });
