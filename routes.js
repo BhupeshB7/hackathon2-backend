@@ -316,10 +316,10 @@ const GITHUB_USERNAME = process.env.GITHUB_USERNAME;
 const VERCEL_TOKEN = process.env.VERCEL_TOKEN;
 const VERCEL_API_URL = "https://api.vercel.com";
 
-// Store deployment progress and clients
+// Store deployment progress and status
 const deploymentStore = new Map();
 
-// Update progress for SSE clients
+// Update progress function
 function updateProgress(deploymentId, progress, message, type = 'progress') {
     const deployment = deploymentStore.get(deploymentId);
     if (deployment) {
@@ -327,128 +327,22 @@ function updateProgress(deploymentId, progress, message, type = 'progress') {
         deployment.logs.push({
             message,
             type,
+            level: type === 'progress' ? 'info' : type,
             timestamp: new Date().toISOString()
         });
-
-        deployment.clients.forEach(client => {
-            if (!client.finished) {
-                try {
-                    client.write(`data: ${JSON.stringify({
-                        type,
-                        progress,
-                        message,
-                        timestamp: new Date().toISOString()
-                    })}\n\n`);
-                } catch (err) {
-                    console.error('Error writing to client:', err);
-                }
-            }
-        });
     }
 }
 
-// Send log message
-function sendLog(deploymentId, message, level = 'info') {
-    const deployment = deploymentStore.get(deploymentId);
-    if (deployment) {
-        deployment.logs.push({
-            message,
-            level,
-            timestamp: new Date().toISOString()
-        });
-
-        deployment.clients.forEach(client => {
-            if (!client.finished) {
-                try {
-                    client.write(`data: ${JSON.stringify({
-                        type: 'log',
-                        message,
-                        level,
-                        timestamp: new Date().toISOString()
-                    })}\n\n`);
-                } catch (err) {
-                    console.error('Error writing to client:', err);
-                }
-            }
-        });
-    }
-}
-
-// Send final result
-function sendResult(deploymentId, type, data) {
-    const deployment = deploymentStore.get(deploymentId);
-    if (deployment) {
-        deployment.clients.forEach(client => {
-            if (!client.finished) {
-                try {
-                    client.write(`data: ${JSON.stringify({
-                        type,
-                        ...data,
-                        timestamp: new Date().toISOString()
-                    })}\n\n`);
-                    client.end();
-                } catch (err) {
-                    console.error('Error writing to client:', err);
-                }
-            }
-        });
-
-        // Clean up after some time
-        setTimeout(() => {
-            deploymentStore.delete(deploymentId);
-        }, 300000); // 5 minutes
-    }
-}
-
-// SSE endpoint for deployment progress
-router.get('/vercel/progress/:deploymentId', (req, res) => {
-    const { deploymentId } = req.params;
-    const deployment = deploymentStore.get(deploymentId);
-
-    if (!deployment) {
-        return res.status(404).json({ error: 'Deployment not found' });
-    }
-
-    // Setup SSE
-    res.writeHead(200, {
-        'Content-Type': 'text/event-stream',
-        'Cache-Control': 'no-cache',
-        'Connection': 'keep-alive',
-        'Access-Control-Allow-Origin': '*',
-        'Access-Control-Allow-Headers': 'Cache-Control'
-    });
-
-    // Add client to deployment
-    deployment.clients.push(res);
-
-    // Send existing logs
-    deployment.logs.forEach(log => {
-        try {
-            res.write(`data: ${JSON.stringify({
-                type: log.type || 'log',
-                message: log.message,
-                level: log.level || 'info',
-                progress: log.progress || 0,
-                timestamp: log.timestamp
-            })}\n\n`);
-        } catch (err) {
-            console.error('Error writing existing log:', err);
-        }
-    });
-
-    // Handle client disconnect
-    req.on('close', () => {
-        deployment.clients = deployment.clients.filter(client => client !== res);
-    });
-
-    req.on('error', (err) => {
-        console.error('SSE client error:', err);
-        deployment.clients = deployment.clients.filter(client => client !== res);
-    });
-});
+// Helper to clean up deployments
+const cleanUpDeployment = (deploymentId) => {
+    setTimeout(() => {
+        deploymentStore.delete(deploymentId);
+        console.log(`Cleaned up deployment ${deploymentId}`);
+    }, 300000); // 5 minutes
+};
 
 const waitForMainBranchCommit = async (owner, repo, deploymentId, maxAttempts = 10) => {
-    sendLog(deploymentId, "⏳ Waiting for GitHub repository to initialize...", 'info');
+    updateProgress(deploymentId, 45, "⏳ Waiting for GitHub repository to initialize...");
 
     for (let i = 1; i <= maxAttempts; i++) {
         try {
@@ -459,24 +353,22 @@ const waitForMainBranchCommit = async (owner, repo, deploymentId, maxAttempts = 
             });
 
             if (data?.commit?.sha) {
-                sendLog(deploymentId, `✅ Repository initialized successfully (attempt ${i})`, 'success');
+                updateProgress(deploymentId, 45, `✅ Repository initialized successfully (attempt ${i})`);
                 return;
             }
         } catch (err) {
             if (err.status !== 404) throw err;
         }
 
-        sendLog(deploymentId, `⏱️ Attempt ${i}: Waiting for repository... (${i + 1}s)`, 'info');
+        updateProgress(deploymentId, 45, `⏱️ Attempt ${i}: Waiting for repository... (${i + 1}s)`);
         await new Promise((r) => setTimeout(r, 1000 * (i + 1)));
     }
 
     throw new Error("❌ Timed out waiting for commit on 'master'");
 };
 
-// Function to wait for Vercel deployment to complete
 const waitForDeploymentComplete = async (deploymentId, vercelDeploymentId, maxAttempts = 40) => {
-    sendLog(deploymentId, "⏳ Starting Vercel deployment...", 'info');
-    updateProgress(deploymentId, 60, "Building your application...");
+    updateProgress(deploymentId, 60, "⏳ Starting Vercel deployment...");
 
     for (let i = 1; i <= maxAttempts; i++) {
         try {
@@ -492,26 +384,24 @@ const waitForDeploymentComplete = async (deploymentId, vercelDeploymentId, maxAt
             const progressPercentage = Math.min(60 + (i * 2), 95);
 
             if (data.readyState === 'READY') {
-                sendLog(deploymentId, `✅ Deployment completed successfully!`, 'success');
-                updateProgress(deploymentId, 100, "🎉 Your app is now live!");
+                updateProgress(deploymentId, 100, "✅ Deployment completed successfully!");
                 return {
                     status: 'success',
                     url: data.url,
                     alias: data.alias || []
                 };
             } else if (data.readyState === 'ERROR') {
-                sendLog(deploymentId, `❌ Deployment failed: ${data.error?.message || 'Unknown error'}`, 'error');
+                updateProgress(deploymentId, 0, `❌ Deployment failed: ${data.error?.message || 'Unknown error'}`, 'error');
                 return {
                     status: 'error',
                     error: data.error?.message || 'Unknown deployment error'
                 };
             } else if (data.readyState === 'CANCELED') {
-                sendLog(deploymentId, `❌ Deployment was canceled`, 'error');
+                updateProgress(deploymentId, 0, `❌ Deployment was canceled`, 'error');
                 return {
                     status: 'canceled'
                 };
             } else {
-                // Update progress based on deployment state
                 let statusMessage = "Building...";
                 if (data.readyState === 'BUILDING') {
                     statusMessage = "🔨 Building your application...";
@@ -520,18 +410,16 @@ const waitForDeploymentComplete = async (deploymentId, vercelDeploymentId, maxAt
                 }
 
                 updateProgress(deploymentId, progressPercentage, statusMessage);
-                sendLog(deploymentId, `${statusMessage} (${data.readyState})`, 'info');
             }
 
-            // Wait before next check
             const waitTime = Math.min(3000 + (i * 500), 10000);
             await new Promise((r) => setTimeout(r, waitTime));
 
         } catch (error) {
-            sendLog(deploymentId, `❌ Error checking deployment: ${error.message}`, 'error');
+            updateProgress(deploymentId, 0, `❌ Error checking deployment: ${error.message}`, 'error');
 
             if (error.response?.status === 404) {
-                sendLog(deploymentId, `⏱️ Deployment not ready yet, retrying...`, 'info');
+                updateProgress(deploymentId, 60, `⏱️ Deployment not ready yet, retrying...`);
                 await new Promise((r) => setTimeout(r, 3000));
                 continue;
             }
@@ -543,6 +431,7 @@ const waitForDeploymentComplete = async (deploymentId, vercelDeploymentId, maxAt
     throw new Error("❌ Timed out waiting for deployment to complete");
 };
 
+// Deployment endpoint
 router.post("/deploy-to-vercel", async (req, res) => {
     const deploymentId = uuidv4();
 
@@ -550,9 +439,14 @@ router.post("/deploy-to-vercel", async (req, res) => {
     deploymentStore.set(deploymentId, {
         id: deploymentId,
         progress: 0,
-        logs: [],
-        clients: [],
-        startTime: new Date().toISOString()
+        logs: [{
+            message: "🚀 Starting deployment process...",
+            level: 'info',
+            timestamp: new Date().toISOString()
+        }],
+        startTime: new Date().toISOString(),
+        result: null,
+        error: null
     });
 
     // Return deployment ID immediately
@@ -566,16 +460,13 @@ router.post("/deploy-to-vercel", async (req, res) => {
         const { code, templateId, projectName } = req.body;
 
         if (!code || !projectName) {
-            sendLog(deploymentId, "❌ Missing required fields", 'error');
-            sendResult(deploymentId, 'error', { error: "Code and project name are required" });
-            return;
+            throw new Error("Code and project name are required");
         }
 
         const sanitizedProjectName = projectName.toLowerCase().replace(/[^a-z0-9-]/g, "-");
 
         // Step 1: Create GitHub repo
         updateProgress(deploymentId, 10, "🔨 Creating GitHub repository...");
-        sendLog(deploymentId, `Creating repository: ${sanitizedProjectName}`, 'info');
 
         const repoResponse = await octokit.rest.repos.createForAuthenticatedUser({
             name: sanitizedProjectName,
@@ -585,7 +476,7 @@ router.post("/deploy-to-vercel", async (req, res) => {
         });
 
         const repoUrl = repoResponse.data.html_url;
-        sendLog(deploymentId, `✅ Repository created: ${repoUrl}`, 'success');
+        updateProgress(deploymentId, 15, `✅ Repository created: ${repoUrl}`);
 
         // Step 2: Define files
         updateProgress(deploymentId, 20, "📝 Preparing project files...");
@@ -646,7 +537,6 @@ router.post("/deploy-to-vercel", async (req, res) => {
             uploadedFiles++;
             const uploadProgress = 30 + (uploadedFiles / totalFiles) * 10;
             updateProgress(deploymentId, uploadProgress, `📤 Uploaded ${filePath}`);
-            sendLog(deploymentId, `✅ Uploaded: ${filePath}`, 'success');
         }
 
         // Step 4: Confirm commit exists
@@ -655,7 +545,6 @@ router.post("/deploy-to-vercel", async (req, res) => {
 
         // Step 5: Create Vercel project
         updateProgress(deploymentId, 50, "🚀 Setting up Vercel project...");
-        sendLog(deploymentId, "Creating Vercel project...", 'info');
 
         const projectResponse = await axios.post(
             `${VERCEL_API_URL}/v9/projects`,
@@ -678,7 +567,7 @@ router.post("/deploy-to-vercel", async (req, res) => {
             }
         );
 
-        sendLog(deploymentId, `✅ Vercel project created: ${projectResponse.data.name}`, 'success');
+        updateProgress(deploymentId, 55, `✅ Vercel project created: ${projectResponse.data.name}`);
 
         // Step 6: Trigger deployment
         updateProgress(deploymentId, 55, "🚀 Triggering deployment...");
@@ -709,7 +598,7 @@ router.post("/deploy-to-vercel", async (req, res) => {
         );
 
         const vercelDeploymentId = deploymentResponse.data.id;
-        sendLog(deploymentId, `🚀 Deployment started with ID: ${vercelDeploymentId}`, 'info');
+        updateProgress(deploymentId, 60, `🚀 Deployment started with ID: ${vercelDeploymentId}`);
 
         // Step 7: Wait for deployment to complete
         const deploymentResult = await waitForDeploymentComplete(deploymentId, vercelDeploymentId);
@@ -717,27 +606,75 @@ router.post("/deploy-to-vercel", async (req, res) => {
         if (deploymentResult.status === 'success') {
             const finalUrl = `https://${sanitizedProjectName}.vercel.app`;
 
-            sendResult(deploymentId, 'success', {
-                githubUrl: repoUrl,
-                deploymentUrl: finalUrl,
-                vercelProject: projectResponse.data.name,
-                message: "✅ App deployed successfully to Vercel!",
-                vercelDeploymentId,
-            });
+            // Store result
+            const deployment = deploymentStore.get(deploymentId);
+            if (deployment) {
+                deployment.result = {
+                    githubUrl: repoUrl,
+                    deploymentUrl: finalUrl,
+                    vercelProject: projectResponse.data.name,
+                    vercelDeploymentId,
+                };
+                deployment.progress = 100;
+            }
         } else {
-            sendResult(deploymentId, 'error', {
-                error: `Deployment failed: ${deploymentResult.error || deploymentResult.status}`
-            });
+            // Store error
+            const deployment = deploymentStore.get(deploymentId);
+            if (deployment) {
+                deployment.error = `Deployment failed: ${deploymentResult.error || deploymentResult.status}`;
+            }
         }
 
     } catch (error) {
         console.error("🚨 Deployment Error:", error.response?.data || error.message);
-        sendLog(deploymentId, `🚨 Deployment failed: ${error.message}`, 'error');
-        sendResult(deploymentId, 'error', {
-            error: "Deployment failed",
-            details: error.response?.data || error.message,
+        const deployment = deploymentStore.get(deploymentId);
+        if (deployment) {
+            deployment.error = {
+                message: error.message,
+                details: error.response?.data || 'No additional details'
+            };
+            deployment.logs.push({
+                message: `🚨 Deployment failed: ${error.message}`,
+                level: 'error',
+                timestamp: new Date().toISOString()
+            });
+        }
+    } finally {
+        // Schedule cleanup
+        cleanUpDeployment(deploymentId);
+    }
+});
+
+// Status endpoint for polling
+router.get('/vercel/status/:deploymentId', async (req, res) => {
+    const { deploymentId } = req.params;
+    const deployment = deploymentStore.get(deploymentId);
+
+    if (!deployment) {
+        return res.status(404).json({
+            error: 'Deployment not found or expired'
         });
     }
+
+    // Get the last message for current status
+    const lastLog = deployment.logs.length > 0
+        ? deployment.logs[deployment.logs.length - 1]
+        : null;
+
+    const currentMessage = lastLog ? lastLog.message : '';
+
+    res.json({
+        progress: deployment.progress,
+        logs: deployment.logs,
+        currentMessage,
+        status: deployment.result
+            ? 'completed'
+            : deployment.error
+                ? 'error'
+                : 'in_progress',
+        result: deployment.result,
+        error: deployment.error
+    });
 });
 
 export default router;
