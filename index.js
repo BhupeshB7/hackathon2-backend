@@ -445,7 +445,7 @@ app.post('/api/download-project', async (req, res) => {
 });
 app.use("/api", deployRouter);
 // Start server
-app.listen(port, () => {
-    connectDB();
+app.listen(port, async() => {
+    await connectDB();
     console.log(`  Server running on http://localhost:${port}`);
 });
